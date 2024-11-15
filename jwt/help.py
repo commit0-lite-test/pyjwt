@@ -6,10 +6,9 @@ from . import __version__ as pyjwt_version
 
 try:
     import cryptography
-
     cryptography_version = cryptography.__version__
 except ImportError:
-    cryptography_version = "Not installed"
+    cryptography_version = "Not installed (ImportError)"
 
 
 def info() -> Dict[str, Dict[str, Any]]:
