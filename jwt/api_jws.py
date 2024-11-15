@@ -1,21 +1,25 @@
 from __future__ import annotations
 import binascii
 import json
-import warnings
 from typing import TYPE_CHECKING, Any
-from .algorithms import Algorithm, get_default_algorithms, has_crypto, requires_cryptography
-from .exceptions import DecodeError, InvalidAlgorithmError, InvalidSignatureError, InvalidTokenError
-from .utils import base64url_decode, base64url_encode, force_bytes
-from .warnings import RemovedInPyjwt3Warning
+from .algorithms import Algorithm, get_default_algorithms
+from .exceptions import DecodeError, InvalidAlgorithmError
+from .utils import base64url_decode, force_bytes
+
 if TYPE_CHECKING:
-    from .algorithms import AllowedPrivateKeys, AllowedPublicKeys
+    pass
+
 
 class PyJWS:
-    header_typ = 'JWT'
+    header_typ = "JWT"
 
-    def __init__(self, algorithms: list[str] | None=None, options: dict[str, Any] | None=None) -> None:
+    def __init__(
+        self, algorithms: list[str] | None = None, options: dict[str, Any] | None = None
+    ) -> None:
         self._algorithms = get_default_algorithms()
-        self._valid_algs = set(algorithms) if algorithms is not None else set(self._algorithms)
+        self._valid_algs = (
+            set(algorithms) if algorithms is not None else set(self._algorithms)
+        )
         for key in list(self._algorithms.keys()):
             if key not in self._valid_algs:
                 del self._algorithms[key]
@@ -24,17 +28,14 @@ class PyJWS:
         self.options = {**self._get_default_options(), **options}
 
     def register_algorithm(self, alg_id: str, alg_obj: Algorithm) -> None:
-        """
-        Registers a new Algorithm for use when creating and verifying tokens.
-        """
+        """Registers a new Algorithm for use when creating and verifying tokens."""
         if alg_id in self._algorithms:
             raise ValueError(f"Algorithm '{alg_id}' already registered")
         self._algorithms[alg_id] = alg_obj
         self._valid_algs.add(alg_id)
 
     def unregister_algorithm(self, alg_id: str) -> None:
-        """
-        Unregisters an Algorithm for use when creating and verifying tokens
+        """Unregisters an Algorithm for use when creating and verifying tokens
         Throws KeyError if algorithm is not registered.
         """
         if alg_id not in self._algorithms:
@@ -43,14 +44,11 @@ class PyJWS:
         self._valid_algs.remove(alg_id)
 
     def get_algorithms(self) -> list[str]:
-        """
-        Returns a list of supported values for the 'alg' parameter.
-        """
+        """Returns a list of supported values for the 'alg' parameter."""
         return list(self._valid_algs)
 
     def get_algorithm_by_name(self, alg_name: str) -> Algorithm:
-        """
-        For a given string name, return the matching Algorithm object.
+        """For a given string name, return the matching Algorithm object.
 
         Example usage:
 
@@ -68,11 +66,13 @@ class PyJWS:
         """
         jwt = force_bytes(jwt)
         try:
-            header_segment = jwt.split(b'.', 1)[0]
+            header_segment = jwt.split(b".", 1)[0]
             header_data = base64url_decode(header_segment)
             return json.loads(header_data)
         except (ValueError, TypeError, binascii.Error) as e:
             raise DecodeError("Invalid header padding") from e
+
+
 _jws_global_obj = PyJWS()
 encode = _jws_global_obj.encode
 decode_complete = _jws_global_obj.decode_complete
