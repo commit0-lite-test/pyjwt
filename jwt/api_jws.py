@@ -76,8 +76,7 @@ class PyJWS:
             raise DecodeError("Invalid header padding") from e
 
     def encode(self, payload: dict[str, Any], key: str, algorithm: str) -> str:
-        """
-        Encode a JWT with the given payload, key, and algorithm.
+        """Encode a JWT with the given payload, key, and algorithm.
 
         This is a placeholder implementation.
         """
@@ -87,8 +86,7 @@ class PyJWS:
     def decode_complete(
         self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
     ) -> dict[str, Any]:
-        """
-        Decode a JWT and return the complete token as a dictionary.
+        """Decode a JWT and return the complete token as a dictionary.
 
         This is a placeholder implementation.
         """
@@ -98,8 +96,7 @@ class PyJWS:
     def decode(
         self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
     ) -> dict[str, Any]:
-        """
-        Decode a JWT and return its payload as a dictionary.
+        """Decode a JWT and return its payload as a dictionary.
 
         This is a placeholder implementation.
         """
