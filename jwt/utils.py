@@ -3,7 +3,7 @@ import re
 from typing import Union
 
 try:
-    import cryptography  # noqa: F401
+    import cryptography  # type: ignore # noqa: F401
 except ImportError:
     cryptography = None
 _PEMS = {
