@@ -18,9 +18,10 @@ from .utils import (
 )
 
 if sys.version_info >= (3, 8):
-    pass
+    from typing import Literal
 else:
-    pass
+    from typing_extensions import Literal
+
 try:
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.backends import default_backend
@@ -62,19 +63,16 @@ try:
     has_crypto = True
 except ModuleNotFoundError:
     has_crypto = False
+
 if TYPE_CHECKING:
-    AllowedRSAKeys = RSAPrivateKey | RSAPublicKey
-    AllowedECKeys = EllipticCurvePrivateKey | EllipticCurvePublicKey
-    AllowedOKPKeys = (
-        Ed25519PrivateKey | Ed25519PublicKey | Ed448PrivateKey | Ed448PublicKey
-    )
-    AllowedKeys = AllowedRSAKeys | AllowedECKeys | AllowedOKPKeys
-    AllowedPrivateKeys = (
-        RSAPrivateKey | EllipticCurvePrivateKey | Ed25519PrivateKey | Ed448PrivateKey
-    )
-    AllowedPublicKeys = (
-        RSAPublicKey | EllipticCurvePublicKey | Ed25519PublicKey | Ed448PublicKey
-    )
+    from typing import TypeAlias
+
+    AllowedRSAKeys: TypeAlias = RSAPrivateKey | RSAPublicKey
+    AllowedECKeys: TypeAlias = EllipticCurvePrivateKey | EllipticCurvePublicKey
+    AllowedOKPKeys: TypeAlias = Ed25519PrivateKey | Ed25519PublicKey | Ed448PrivateKey | Ed448PublicKey
+    AllowedKeys: TypeAlias = AllowedRSAKeys | AllowedECKeys | AllowedOKPKeys
+    AllowedPrivateKeys: TypeAlias = RSAPrivateKey | EllipticCurvePrivateKey | Ed25519PrivateKey | Ed448PrivateKey
+    AllowedPublicKeys: TypeAlias = RSAPublicKey | EllipticCurvePublicKey | Ed25519PublicKey | Ed448PublicKey
 requires_cryptography = {
     "RS256",
     "RS384",
@@ -121,6 +119,8 @@ def get_default_algorithms() -> dict[str, Algorithm]:
 
 class Algorithm(ABC):
     """The interface for an algorithm used to sign and verify tokens."""
+
+    hash_alg: ClassVar[HashlibHash]
 
     def compute_hash_digest(self, bytestr: bytes) -> bytes:
         """Compute a hash digest using the specified algorithm's hash algorithm.
@@ -266,7 +266,7 @@ if has_crypto:
         def __init__(self, hash_alg: type[hashes.HashAlgorithm]) -> None:
             self.hash_alg = hash_alg
 
-        def prepare_key(self, key: Any) -> AllowedRSAKeys:
+        def prepare_key(self, key: Any) -> Union[RSAPrivateKey, RSAPublicKey]:
             """Prepare the key for use in the algorithm."""
             if isinstance(key, (RSAPrivateKey, RSAPublicKey)):
                 return key
@@ -370,7 +370,7 @@ if has_crypto:
         def __init__(self, hash_alg: type[hashes.HashAlgorithm]) -> None:
             self.hash_alg = hash_alg
 
-        def prepare_key(self, key: Any) -> AllowedECKeys:
+        def prepare_key(self, key: Any) -> Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
             """Prepare the key for use in the algorithm."""
             if isinstance(key, (EllipticCurvePrivateKey, EllipticCurvePublicKey)):
                 return key
@@ -469,7 +469,7 @@ if has_crypto:
     class RSAPSSAlgorithm(RSAAlgorithm):
         """Performs a signature using RSASSA-PSS with MGF1"""
 
-        def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
+        def sign(self, msg: bytes, key: Union[RSAPrivateKey, RSAPublicKey]) -> bytes:
             """Sign the message using the key."""
             return key.sign(
                 msg,
@@ -480,7 +480,7 @@ if has_crypto:
                 self.hash_alg(),
             )
 
-        def verify(self, msg: bytes, key: AllowedRSAKeys, sig: bytes) -> bool:
+        def verify(self, msg: bytes, key: Union[RSAPrivateKey, RSAPublicKey], sig: bytes) -> bool:
             """Verify the signature of the message using the key."""
             try:
                 key.verify(
@@ -505,7 +505,7 @@ if has_crypto:
         def __init__(self, **kwargs: Any) -> None:
             pass
 
-        def prepare_key(self, key: Any) -> AllowedOKPKeys:
+        def prepare_key(self, key: Any) -> Union[Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey]:
             """Prepare the key for use in the algorithm."""
             if isinstance(
                 key,
