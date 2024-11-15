@@ -27,6 +27,9 @@ class PyJWS:
             options = {}
         self.options = {**self._get_default_options(), **options}
 
+    def _get_default_options(self) -> dict[str, Any]:
+        return {}
+
     def register_algorithm(self, alg_id: str, alg_obj: Algorithm) -> None:
         """Registers a new Algorithm for use when creating and verifying tokens."""
         if alg_id in self._algorithms:
@@ -71,6 +74,18 @@ class PyJWS:
             return json.loads(header_data)
         except (ValueError, TypeError, binascii.Error) as e:
             raise DecodeError("Invalid header padding") from e
+
+    def encode(self, payload: dict[str, Any], key: str, algorithm: str) -> str:
+        # Placeholder for encode method
+        pass
+
+    def decode_complete(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+        # Placeholder for decode_complete method
+        pass
+
+    def decode(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+        # Placeholder for decode method
+        pass
 
 
 _jws_global_obj = PyJWS()
