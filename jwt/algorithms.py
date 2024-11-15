@@ -147,6 +147,7 @@ class Algorithm(ABC):
 
     @abstractmethod
     def sign(self, msg: bytes, key: Any) -> bytes:
+        """Sign the message using the key."""
         """Returns a digital signature for the specified message
         using the specified key value.
         """
@@ -154,6 +155,7 @@ class Algorithm(ABC):
 
     @abstractmethod
     def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
+        """Verify the signature of the message using the key."""
         """Verifies that the specified digital signature is valid
         for the specified message and key values.
         """
@@ -161,7 +163,7 @@ class Algorithm(ABC):
 
     @staticmethod
     @abstractmethod
-    def to_jwk(key_obj, as_dict: bool = False) -> Union[JWKDict, str]:
+    def to_jwk(key_obj: Any, as_dict: bool = False) -> Union[JWKDict, str]:
         """Serializes a given key into a JWK"""
         pass
 
@@ -178,6 +180,7 @@ class NoneAlgorithm(Algorithm):
     """
 
     def prepare_key(self, key: Any) -> None:
+        """Prepare the key for use in the algorithm."""
         return None
 
     def sign(self, msg: bytes, key: Any) -> bytes:
