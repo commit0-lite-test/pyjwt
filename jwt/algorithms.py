@@ -18,9 +18,9 @@ from .utils import (
 )
 
 if sys.version_info >= (3, 8):
-    from typing import Literal
+    pass
 else:
-    from typing_extensions import Literal
+    pass
 
 try:
     from cryptography.exceptions import InvalidSignature
@@ -69,10 +69,16 @@ if TYPE_CHECKING:
 
     AllowedRSAKeys: TypeAlias = RSAPrivateKey | RSAPublicKey
     AllowedECKeys: TypeAlias = EllipticCurvePrivateKey | EllipticCurvePublicKey
-    AllowedOKPKeys: TypeAlias = Ed25519PrivateKey | Ed25519PublicKey | Ed448PrivateKey | Ed448PublicKey
+    AllowedOKPKeys: TypeAlias = (
+        Ed25519PrivateKey | Ed25519PublicKey | Ed448PrivateKey | Ed448PublicKey
+    )
     AllowedKeys: TypeAlias = AllowedRSAKeys | AllowedECKeys | AllowedOKPKeys
-    AllowedPrivateKeys: TypeAlias = RSAPrivateKey | EllipticCurvePrivateKey | Ed25519PrivateKey | Ed448PrivateKey
-    AllowedPublicKeys: TypeAlias = RSAPublicKey | EllipticCurvePublicKey | Ed25519PublicKey | Ed448PublicKey
+    AllowedPrivateKeys: TypeAlias = (
+        RSAPrivateKey | EllipticCurvePrivateKey | Ed25519PrivateKey | Ed448PrivateKey
+    )
+    AllowedPublicKeys: TypeAlias = (
+        RSAPublicKey | EllipticCurvePublicKey | Ed25519PublicKey | Ed448PublicKey
+    )
 requires_cryptography = {
     "RS256",
     "RS384",
@@ -370,7 +376,9 @@ if has_crypto:
         def __init__(self, hash_alg: type[hashes.HashAlgorithm]) -> None:
             self.hash_alg = hash_alg
 
-        def prepare_key(self, key: Any) -> Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
+        def prepare_key(
+            self, key: Any
+        ) -> Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]:
             """Prepare the key for use in the algorithm."""
             if isinstance(key, (EllipticCurvePrivateKey, EllipticCurvePublicKey)):
                 return key
@@ -480,7 +488,9 @@ if has_crypto:
                 self.hash_alg(),
             )
 
-        def verify(self, msg: bytes, key: Union[RSAPrivateKey, RSAPublicKey], sig: bytes) -> bool:
+        def verify(
+            self, msg: bytes, key: Union[RSAPrivateKey, RSAPublicKey], sig: bytes
+        ) -> bool:
             """Verify the signature of the message using the key."""
             try:
                 key.verify(
@@ -505,7 +515,11 @@ if has_crypto:
         def __init__(self, **kwargs: Any) -> None:
             pass
 
-        def prepare_key(self, key: Any) -> Union[Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey]:
+        def prepare_key(
+            self, key: Any
+        ) -> Union[
+            Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey
+        ]:
             """Prepare the key for use in the algorithm."""
             if isinstance(
                 key,
