@@ -1,18 +1,18 @@
 import json
 import platform
 import sys
-from typing import Dict
+from typing import Dict, Any
 from . import __version__ as pyjwt_version
 
 try:
     import cryptography
 
     cryptography_version = cryptography.__version__
-except ModuleNotFoundError:
-    cryptography_version = ""
+except ImportError:
+    cryptography_version = "Not installed"
 
 
-def info() -> Dict[str, Dict[str, str]]:
+def info() -> Dict[str, Dict[str, Any]]:
     """Generate information for a bug report.
     Based on the requests package help utility module.
     """
