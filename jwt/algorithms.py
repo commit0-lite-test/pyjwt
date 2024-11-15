@@ -28,11 +28,9 @@ try:
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives.asymmetric.ec import (
         ECDSA,
-        SECP256K1,
         SECP256R1,
         SECP384R1,
         SECP521R1,
-        EllipticCurve,
         EllipticCurvePrivateKey,
         EllipticCurvePrivateNumbers,
         EllipticCurvePublicKey,
@@ -51,10 +49,6 @@ try:
         RSAPrivateNumbers,
         RSAPublicKey,
         RSAPublicNumbers,
-        rsa_crt_dmp1,
-        rsa_crt_dmq1,
-        rsa_crt_iqmp,
-        rsa_recover_prime_factors,
     )
     from cryptography.hazmat.primitives.serialization import (
         Encoding,
@@ -63,7 +57,6 @@ try:
         PublicFormat,
         load_pem_private_key,
         load_pem_public_key,
-        load_ssh_public_key,
     )
 
     has_crypto = True
