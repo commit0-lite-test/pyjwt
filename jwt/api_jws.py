@@ -79,11 +79,15 @@ class PyJWS:
         # Placeholder for encode method
         pass
 
-    def decode_complete(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+    def decode_complete(
+        self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
+    ) -> dict[str, Any]:
         # Placeholder for decode_complete method
         pass
 
-    def decode(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+    def decode(
+        self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
+    ) -> dict[str, Any]:
         # Placeholder for decode method
         pass
 
