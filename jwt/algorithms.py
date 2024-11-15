@@ -202,6 +202,100 @@ if has_crypto:
         def __init__(self, hash_alg: type[hashes.HashAlgorithm]) -> None:
             self.hash_alg = hash_alg
 
+        def prepare_key(self, key: Any) -> AllowedRSAKeys:
+            if isinstance(key, (RSAPrivateKey, RSAPublicKey)):
+                return key
+            if isinstance(key, (bytes, str)):
+                key = force_bytes(key)
+                try:
+                    if key.startswith(b'-----BEGIN '):
+                        return load_pem_private_key(key, password=None, backend=default_backend())
+                except ValueError:
+                    try:
+                        return load_pem_public_key(key, backend=default_backend())
+                    except ValueError:
+                        raise InvalidKeyError("Not a valid RSA key")
+            raise TypeError("Expecting a PEM-formatted key.")
+
+        def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
+            return key.sign(
+                msg,
+                padding.PKCS1v15(),
+                self.hash_alg()
+            )
+
+        def verify(self, msg: bytes, key: AllowedRSAKeys, sig: bytes) -> bool:
+            try:
+                key.verify(
+                    sig,
+                    msg,
+                    padding.PKCS1v15(),
+                    self.hash_alg()
+                )
+                return True
+            except InvalidSignature:
+                return False
+
+        @staticmethod
+        def to_jwk(key_obj: AllowedRSAKeys, as_dict: bool = False) -> Union[JWKDict, str]:
+            if isinstance(key_obj, RSAPrivateKey):
+                numbers = key_obj.private_numbers()
+                jwk = {
+                    'kty': 'RSA',
+                    'n': to_base64url_uint(numbers.public_numbers.n).decode(),
+                    'e': to_base64url_uint(numbers.public_numbers.e).decode(),
+                    'd': to_base64url_uint(numbers.d).decode(),
+                    'p': to_base64url_uint(numbers.p).decode(),
+                    'q': to_base64url_uint(numbers.q).decode(),
+                    'dp': to_base64url_uint(numbers.dmp1).decode(),
+                    'dq': to_base64url_uint(numbers.dmq1).decode(),
+                    'qi': to_base64url_uint(numbers.iqmp).decode(),
+                }
+            elif isinstance(key_obj, RSAPublicKey):
+                numbers = key_obj.public_numbers()
+                jwk = {
+                    'kty': 'RSA',
+                    'n': to_base64url_uint(numbers.n).decode(),
+                    'e': to_base64url_uint(numbers.e).decode(),
+                }
+            else:
+                raise InvalidKeyError("Not a valid RSA key")
+
+            if as_dict:
+                return jwk
+            return json.dumps(jwk)
+
+        @staticmethod
+        def from_jwk(jwk: str | JWKDict) -> AllowedRSAKeys:
+            if isinstance(jwk, str):
+                jwk = json.loads(jwk)
+            if not isinstance(jwk, dict):
+                raise InvalidKeyError("Invalid JWK")
+
+            if jwk.get('kty') != 'RSA':
+                raise InvalidKeyError("Not a RSA key")
+
+            if 'd' in jwk and 'p' in jwk and 'q' in jwk:
+                # It's a private key
+                return RSAPrivateNumbers(
+                    p=from_base64url_uint(jwk['p']),
+                    q=from_base64url_uint(jwk['q']),
+                    d=from_base64url_uint(jwk['d']),
+                    dmp1=from_base64url_uint(jwk['dp']),
+                    dmq1=from_base64url_uint(jwk['dq']),
+                    iqmp=from_base64url_uint(jwk['qi']),
+                    public_numbers=RSAPublicNumbers(
+                        e=from_base64url_uint(jwk['e']),
+                        n=from_base64url_uint(jwk['n'])
+                    )
+                ).private_key(default_backend())
+            else:
+                # It's a public key
+                return RSAPublicNumbers(
+                    e=from_base64url_uint(jwk['e']),
+                    n=from_base64url_uint(jwk['n'])
+                ).public_key(default_backend())
+
     class ECAlgorithm(Algorithm):
         """
         Performs signing and verification operations using
@@ -214,10 +308,119 @@ if has_crypto:
         def __init__(self, hash_alg: type[hashes.HashAlgorithm]) -> None:
             self.hash_alg = hash_alg
 
+        def prepare_key(self, key: Any) -> AllowedECKeys:
+            if isinstance(key, (EllipticCurvePrivateKey, EllipticCurvePublicKey)):
+                return key
+            if isinstance(key, (bytes, str)):
+                key = force_bytes(key)
+                try:
+                    if key.startswith(b'-----BEGIN '):
+                        return load_pem_private_key(key, password=None, backend=default_backend())
+                except ValueError:
+                    try:
+                        return load_pem_public_key(key, backend=default_backend())
+                    except ValueError:
+                        raise InvalidKeyError("Not a valid EC key")
+            raise TypeError("Expecting a PEM-formatted key.")
+
+        def sign(self, msg: bytes, key: AllowedECKeys) -> bytes:
+            sig = key.sign(msg, ECDSA(self.hash_alg()))
+            return der_to_raw_signature(sig, key.curve)
+
+        def verify(self, msg: bytes, key: AllowedECKeys, sig: bytes) -> bool:
+            try:
+                der_sig = raw_to_der_signature(sig, key.curve)
+                key.verify(der_sig, msg, ECDSA(self.hash_alg()))
+                return True
+            except InvalidSignature:
+                return False
+
+        @staticmethod
+        def to_jwk(key_obj: AllowedECKeys, as_dict: bool = False) -> Union[JWKDict, str]:
+            if isinstance(key_obj, EllipticCurvePrivateKey):
+                numbers = key_obj.private_numbers()
+                jwk = {
+                    'kty': 'EC',
+                    'crv': key_obj.curve.name,
+                    'x': to_base64url_uint(numbers.public_numbers.x).decode(),
+                    'y': to_base64url_uint(numbers.public_numbers.y).decode(),
+                    'd': to_base64url_uint(numbers.private_value).decode(),
+                }
+            elif isinstance(key_obj, EllipticCurvePublicKey):
+                numbers = key_obj.public_numbers()
+                jwk = {
+                    'kty': 'EC',
+                    'crv': key_obj.curve.name,
+                    'x': to_base64url_uint(numbers.x).decode(),
+                    'y': to_base64url_uint(numbers.y).decode(),
+                }
+            else:
+                raise InvalidKeyError("Not a valid EC key")
+
+            if as_dict:
+                return jwk
+            return json.dumps(jwk)
+
+        @staticmethod
+        def from_jwk(jwk: str | JWKDict) -> AllowedECKeys:
+            if isinstance(jwk, str):
+                jwk = json.loads(jwk)
+            if not isinstance(jwk, dict):
+                raise InvalidKeyError("Invalid JWK")
+
+            if jwk.get('kty') != 'EC':
+                raise InvalidKeyError("Not an EC key")
+
+            curve_name = jwk['crv']
+            if curve_name == 'P-256':
+                curve = SECP256R1()
+            elif curve_name == 'P-384':
+                curve = SECP384R1()
+            elif curve_name == 'P-521':
+                curve = SECP521R1()
+            else:
+                raise InvalidKeyError(f"Unsupported curve: {curve_name}")
+
+            x = from_base64url_uint(jwk['x'])
+            y = from_base64url_uint(jwk['y'])
+
+            if 'd' in jwk:
+                d = from_base64url_uint(jwk['d'])
+                return EllipticCurvePrivateNumbers(
+                    private_value=d,
+                    public_numbers=EllipticCurvePublicNumbers(x=x, y=y, curve=curve)
+                ).private_key(default_backend())
+            else:
+                return EllipticCurvePublicNumbers(x=x, y=y, curve=curve).public_key(default_backend())
+
     class RSAPSSAlgorithm(RSAAlgorithm):
         """
         Performs a signature using RSASSA-PSS with MGF1
         """
+        def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
+            return key.sign(
+                msg,
+                padding.PSS(
+                    mgf=padding.MGF1(self.hash_alg()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                self.hash_alg()
+            )
+
+        def verify(self, msg: bytes, key: AllowedRSAKeys, sig: bytes) -> bool:
+            try:
+                key.verify(
+                    sig,
+                    msg,
+                    padding.PSS(
+                        mgf=padding.MGF1(self.hash_alg()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                    ),
+                    self.hash_alg()
+                )
+                return True
+            except InvalidSignature:
+                return False
 
     class OKPAlgorithm(Algorithm):
         """
@@ -229,6 +432,21 @@ if has_crypto:
         def __init__(self, **kwargs: Any) -> None:
             pass
 
+        def prepare_key(self, key: Any) -> AllowedOKPKeys:
+            if isinstance(key, (Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey)):
+                return key
+            if isinstance(key, (bytes, str)):
+                key = force_bytes(key)
+                try:
+                    if key.startswith(b'-----BEGIN '):
+                        return load_pem_private_key(key, password=None, backend=default_backend())
+                except ValueError:
+                    try:
+                        return load_pem_public_key(key, backend=default_backend())
+                    except ValueError:
+                        raise InvalidKeyError("Not a valid OKP key")
+            raise TypeError("Expecting a PEM-formatted key.")
+
         def sign(self, msg: str | bytes, key: Ed25519PrivateKey | Ed448PrivateKey) -> bytes:
             """
             Sign a message ``msg`` using the EdDSA private key ``key``
@@ -237,7 +455,8 @@ if has_crypto:
                 or :class:`.Ed448PrivateKey` isinstance
             :return bytes signature: The signature, as bytes
             """
-            pass
+            msg = force_bytes(msg)
+            return key.sign(msg)
 
         def verify(self, msg: str | bytes, key: AllowedOKPKeys, sig: str | bytes) -> bool:
             """
@@ -249,4 +468,75 @@ if has_crypto:
                 A private or public EdDSA key instance
             :return bool verified: True if signature is valid, False if not.
             """
-            pass
+            msg = force_bytes(msg)
+            sig = force_bytes(sig)
+            try:
+                if isinstance(key, (Ed25519PrivateKey, Ed448PrivateKey)):
+                    key.public_key().verify(sig, msg)
+                else:
+                    key.verify(sig, msg)
+                return True
+            except InvalidSignature:
+                return False
+
+        @staticmethod
+        def to_jwk(key_obj: AllowedOKPKeys, as_dict: bool = False) -> Union[JWKDict, str]:
+            if isinstance(key_obj, (Ed25519PrivateKey, Ed448PrivateKey)):
+                private_bytes = key_obj.private_bytes(
+                    encoding=Encoding.Raw,
+                    format=PrivateFormat.Raw,
+                    encryption_algorithm=NoEncryption()
+                )
+                public_key = key_obj.public_key()
+                public_bytes = public_key.public_bytes(
+                    encoding=Encoding.Raw,
+                    format=PublicFormat.Raw
+                )
+                crv = 'Ed25519' if isinstance(key_obj, Ed25519PrivateKey) else 'Ed448'
+                jwk = {
+                    'kty': 'OKP',
+                    'crv': crv,
+                    'x': base64url_encode(public_bytes).decode(),
+                    'd': base64url_encode(private_bytes).decode(),
+                }
+            elif isinstance(key_obj, (Ed25519PublicKey, Ed448PublicKey)):
+                public_bytes = key_obj.public_bytes(
+                    encoding=Encoding.Raw,
+                    format=PublicFormat.Raw
+                )
+                crv = 'Ed25519' if isinstance(key_obj, Ed25519PublicKey) else 'Ed448'
+                jwk = {
+                    'kty': 'OKP',
+                    'crv': crv,
+                    'x': base64url_encode(public_bytes).decode(),
+                }
+            else:
+                raise InvalidKeyError("Not a valid OKP key")
+
+            if as_dict:
+                return jwk
+            return json.dumps(jwk)
+
+        @staticmethod
+        def from_jwk(jwk: str | JWKDict) -> AllowedOKPKeys:
+            if isinstance(jwk, str):
+                jwk = json.loads(jwk)
+            if not isinstance(jwk, dict):
+                raise InvalidKeyError("Invalid JWK")
+
+            if jwk.get('kty') != 'OKP':
+                raise InvalidKeyError("Not an OKP key")
+
+            curve_name = jwk['crv']
+            if curve_name == 'Ed25519':
+                if 'd' in jwk:
+                    return Ed25519PrivateKey.from_private_bytes(base64url_decode(jwk['d']))
+                else:
+                    return Ed25519PublicKey.from_public_bytes(base64url_decode(jwk['x']))
+            elif curve_name == 'Ed448':
+                if 'd' in jwk:
+                    return Ed448PrivateKey.from_private_bytes(base64url_decode(jwk['d']))
+                else:
+                    return Ed448PublicKey.from_public_bytes(base64url_decode(jwk['x']))
+            else:
+                raise InvalidKeyError(f"Unsupported curve: {curve_name}")
