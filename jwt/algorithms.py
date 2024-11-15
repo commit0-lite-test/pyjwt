@@ -38,7 +38,28 @@ def get_default_algorithms() -> dict[str, Algorithm]:
     """
     Returns the algorithms that are implemented by the library.
     """
-    pass
+    default_algorithms = {
+        'none': NoneAlgorithm(),
+        'HS256': HMACAlgorithm(HMACAlgorithm.SHA256),
+        'HS384': HMACAlgorithm(HMACAlgorithm.SHA384),
+        'HS512': HMACAlgorithm(HMACAlgorithm.SHA512),
+    }
+    
+    if has_crypto:
+        default_algorithms.update({
+            'RS256': RSAAlgorithm(RSAAlgorithm.SHA256),
+            'RS384': RSAAlgorithm(RSAAlgorithm.SHA384),
+            'RS512': RSAAlgorithm(RSAAlgorithm.SHA512),
+            'ES256': ECAlgorithm(ECAlgorithm.SHA256),
+            'ES384': ECAlgorithm(ECAlgorithm.SHA384),
+            'ES512': ECAlgorithm(ECAlgorithm.SHA512),
+            'PS256': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA256),
+            'PS384': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA384),
+            'PS512': RSAPSSAlgorithm(RSAPSSAlgorithm.SHA512),
+            'EdDSA': OKPAlgorithm(),
+        })
+    
+    return default_algorithms
 
 class Algorithm(ABC):
     """
@@ -51,7 +72,9 @@ class Algorithm(ABC):
 
         If there is no hash algorithm, raises a NotImplementedError.
         """
-        pass
+        if hasattr(self, 'hash_alg'):
+            return self.hash_alg(bytestr).digest()
+        raise NotImplementedError("Hash algorithm not specified")
 
     @abstractmethod
     def prepare_key(self, key: Any) -> Any:
@@ -98,6 +121,28 @@ class NoneAlgorithm(Algorithm):
     Placeholder for use when no signing or verification
     operations are required.
     """
+    def prepare_key(self, key: Any) -> None:
+        return None
+
+    def sign(self, msg: bytes, key: Any) -> bytes:
+        return b''
+
+    def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
+        return False
+
+    @staticmethod
+    def to_jwk(key_obj, as_dict: bool = False) -> Union[JWKDict, str]:
+        if as_dict:
+            return {"kty": "none"}
+        return json.dumps({"kty": "none"})
+
+    @staticmethod
+    def from_jwk(jwk: str | JWKDict) -> None:
+        if isinstance(jwk, str):
+            jwk = json.loads(jwk)
+        if not isinstance(jwk, dict) or jwk.get('kty') != 'none':
+            raise InvalidKeyError('Not a valid "none" key')
+        return None
 
 class HMACAlgorithm(Algorithm):
     """
@@ -110,6 +155,39 @@ class HMACAlgorithm(Algorithm):
 
     def __init__(self, hash_alg: HashlibHash) -> None:
         self.hash_alg = hash_alg
+
+    def prepare_key(self, key: Any) -> bytes:
+        key = force_bytes(key)
+        return key
+
+    def sign(self, msg: bytes, key: Any) -> bytes:
+        key = self.prepare_key(key)
+        return hmac.new(key, msg, self.hash_alg).digest()
+
+    def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
+        key = self.prepare_key(key)
+        return hmac.compare_digest(sig, self.sign(msg, key))
+
+    @staticmethod
+    def to_jwk(key_obj: bytes, as_dict: bool = False) -> Union[JWKDict, str]:
+        jwk = {
+            'kty': 'oct',
+            'k': base64url_encode(force_bytes(key_obj)).decode('ascii')
+        }
+        if as_dict:
+            return jwk
+        return json.dumps(jwk)
+
+    @staticmethod
+    def from_jwk(jwk: str | JWKDict) -> bytes:
+        if isinstance(jwk, str):
+            jwk = json.loads(jwk)
+        if not isinstance(jwk, dict) or jwk.get('kty') != 'oct':
+            raise InvalidKeyError('Not a valid HMAC key')
+        k = jwk.get('k')
+        if not k:
+            raise InvalidKeyError('k is required for HMAC keys')
+        return base64url_decode(k)
 if has_crypto:
 
     class RSAAlgorithm(Algorithm):
