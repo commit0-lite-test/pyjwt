@@ -5,5 +5,5 @@ class RemovedInPyjwt3Warning(DeprecationWarning):
     identify and handle warnings specific to upcoming changes in PyJWT version 3.
     """
 
-    def __init__(self, message):
+    def __init__(self, message: str):
         super().__init__(message)
