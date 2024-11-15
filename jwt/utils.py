@@ -4,8 +4,8 @@ from typing import Union
 
 try:
     import cryptography  # noqa: F401
-except ModuleNotFoundError:
-    pass
+except ImportError:
+    cryptography = None
 _PEMS = {
     b"CERTIFICATE",
     b"TRUSTED CERTIFICATE",
