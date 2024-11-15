@@ -177,19 +177,23 @@ class NoneAlgorithm(Algorithm):
         return None
 
     def sign(self, msg: bytes, key: Any) -> bytes:
+        """Sign the message using the key."""
         return b""
 
     def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
+        """Verify the signature of the message using the key."""
         return False
 
     @staticmethod
-    def to_jwk(key_obj, as_dict: bool = False) -> Union[JWKDict, str]:
+    def to_jwk(key_obj: Any, as_dict: bool = False) -> Union[JWKDict, str]:
+        """Serialize the key into a JWK."""
         if as_dict:
             return {"kty": "none"}
         return json.dumps({"kty": "none"})
 
     @staticmethod
     def from_jwk(jwk: str | JWKDict) -> None:
+        """Deserialize a JWK into a key object."""
         if isinstance(jwk, str):
             jwk = json.loads(jwk)
         if not isinstance(jwk, dict) or jwk.get("kty") != "none":
@@ -210,19 +214,23 @@ class HMACAlgorithm(Algorithm):
         self.hash_alg = hash_alg
 
     def prepare_key(self, key: Any) -> bytes:
+        """Prepare the key for use in the algorithm."""
         key = force_bytes(key)
         return key
 
     def sign(self, msg: bytes, key: Any) -> bytes:
+        """Sign the message using the key."""
         key = self.prepare_key(key)
         return hmac.new(key, msg, self.hash_alg).digest()
 
     def verify(self, msg: bytes, key: Any, sig: bytes) -> bool:
+        """Verify the signature of the message using the key."""
         key = self.prepare_key(key)
         return hmac.compare_digest(sig, self.sign(msg, key))
 
     @staticmethod
     def to_jwk(key_obj: bytes, as_dict: bool = False) -> Union[JWKDict, str]:
+        """Serialize the key into a JWK."""
         jwk = {
             "kty": "oct",
             "k": base64url_encode(force_bytes(key_obj)).decode("ascii"),
@@ -233,6 +241,7 @@ class HMACAlgorithm(Algorithm):
 
     @staticmethod
     def from_jwk(jwk: str | JWKDict) -> bytes:
+        """Deserialize a JWK into a key object."""
         if isinstance(jwk, str):
             jwk = json.loads(jwk)
         if not isinstance(jwk, dict) or jwk.get("kty") != "oct":
@@ -258,6 +267,7 @@ if has_crypto:
             self.hash_alg = hash_alg
 
         def prepare_key(self, key: Any) -> AllowedRSAKeys:
+            """Prepare the key for use in the algorithm."""
             if isinstance(key, (RSAPrivateKey, RSAPublicKey)):
                 return key
             if isinstance(key, (bytes, str)):
@@ -275,9 +285,11 @@ if has_crypto:
             raise TypeError("Expecting a PEM-formatted key.")
 
         def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
+            """Sign the message using the key."""
             return key.sign(msg, padding.PKCS1v15(), self.hash_alg())
 
         def verify(self, msg: bytes, key: AllowedRSAKeys, sig: bytes) -> bool:
+            """Verify the signature of the message using the key."""
             try:
                 key.verify(sig, msg, padding.PKCS1v15(), self.hash_alg())
                 return True
@@ -288,6 +300,7 @@ if has_crypto:
         def to_jwk(
             key_obj: AllowedRSAKeys, as_dict: bool = False
         ) -> Union[JWKDict, str]:
+            """Serialize the key into a JWK."""
             if isinstance(key_obj, RSAPrivateKey):
                 numbers = key_obj.private_numbers()
                 jwk = {
@@ -317,6 +330,7 @@ if has_crypto:
 
         @staticmethod
         def from_jwk(jwk: str | JWKDict) -> AllowedRSAKeys:
+            """Deserialize a JWK into a key object."""
             if isinstance(jwk, str):
                 jwk = json.loads(jwk)
             if not isinstance(jwk, dict):
@@ -357,6 +371,7 @@ if has_crypto:
             self.hash_alg = hash_alg
 
         def prepare_key(self, key: Any) -> AllowedECKeys:
+            """Prepare the key for use in the algorithm."""
             if isinstance(key, (EllipticCurvePrivateKey, EllipticCurvePublicKey)):
                 return key
             if isinstance(key, (bytes, str)):
@@ -374,10 +389,12 @@ if has_crypto:
             raise TypeError("Expecting a PEM-formatted key.")
 
         def sign(self, msg: bytes, key: AllowedECKeys) -> bytes:
+            """Sign the message using the key."""
             sig = key.sign(msg, ECDSA(self.hash_alg()))
             return der_to_raw_signature(sig, key.curve)
 
         def verify(self, msg: bytes, key: AllowedECKeys, sig: bytes) -> bool:
+            """Verify the signature of the message using the key."""
             try:
                 der_sig = raw_to_der_signature(sig, key.curve)
                 key.verify(der_sig, msg, ECDSA(self.hash_alg()))
@@ -389,6 +406,7 @@ if has_crypto:
         def to_jwk(
             key_obj: AllowedECKeys, as_dict: bool = False
         ) -> Union[JWKDict, str]:
+            """Serialize the key into a JWK."""
             if isinstance(key_obj, EllipticCurvePrivateKey):
                 numbers = key_obj.private_numbers()
                 jwk = {
@@ -415,6 +433,7 @@ if has_crypto:
 
         @staticmethod
         def from_jwk(jwk: str | JWKDict) -> AllowedECKeys:
+            """Deserialize a JWK into a key object."""
             if isinstance(jwk, str):
                 jwk = json.loads(jwk)
             if not isinstance(jwk, dict):
@@ -451,6 +470,7 @@ if has_crypto:
         """Performs a signature using RSASSA-PSS with MGF1"""
 
         def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
+            """Sign the message using the key."""
             return key.sign(
                 msg,
                 padding.PSS(
@@ -461,6 +481,7 @@ if has_crypto:
             )
 
         def verify(self, msg: bytes, key: AllowedRSAKeys, sig: bytes) -> bool:
+            """Verify the signature of the message using the key."""
             try:
                 key.verify(
                     sig,
@@ -485,6 +506,7 @@ if has_crypto:
             pass
 
         def prepare_key(self, key: Any) -> AllowedOKPKeys:
+            """Prepare the key for use in the algorithm."""
             if isinstance(
                 key,
                 (Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey),
@@ -542,6 +564,7 @@ if has_crypto:
         def to_jwk(
             key_obj: AllowedOKPKeys, as_dict: bool = False
         ) -> Union[JWKDict, str]:
+            """Serialize the key into a JWK."""
             if isinstance(key_obj, (Ed25519PrivateKey, Ed448PrivateKey)):
                 private_bytes = key_obj.private_bytes(
                     encoding=Encoding.Raw,
@@ -578,6 +601,7 @@ if has_crypto:
 
         @staticmethod
         def from_jwk(jwk: str | JWKDict) -> AllowedOKPKeys:
+            """Deserialize a JWK into a key object."""
             if isinstance(jwk, str):
                 jwk = json.loads(jwk)
             if not isinstance(jwk, dict):
