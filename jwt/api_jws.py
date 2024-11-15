@@ -5,7 +5,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 from .algorithms import Algorithm, get_default_algorithms, has_crypto, requires_cryptography
 from .exceptions import DecodeError, InvalidAlgorithmError, InvalidSignatureError, InvalidTokenError
-from .utils import base64url_decode, base64url_encode
+from .utils import base64url_decode, base64url_encode, force_bytes
 from .warnings import RemovedInPyjwt3Warning
 if TYPE_CHECKING:
     from .algorithms import AllowedPrivateKeys, AllowedPublicKeys
@@ -27,20 +27,26 @@ class PyJWS:
         """
         Registers a new Algorithm for use when creating and verifying tokens.
         """
-        pass
+        if alg_id in self._algorithms:
+            raise ValueError(f"Algorithm '{alg_id}' already registered")
+        self._algorithms[alg_id] = alg_obj
+        self._valid_algs.add(alg_id)
 
     def unregister_algorithm(self, alg_id: str) -> None:
         """
         Unregisters an Algorithm for use when creating and verifying tokens
         Throws KeyError if algorithm is not registered.
         """
-        pass
+        if alg_id not in self._algorithms:
+            raise KeyError(f"Algorithm '{alg_id}' not registered")
+        del self._algorithms[alg_id]
+        self._valid_algs.remove(alg_id)
 
     def get_algorithms(self) -> list[str]:
         """
         Returns a list of supported values for the 'alg' parameter.
         """
-        pass
+        return list(self._valid_algs)
 
     def get_algorithm_by_name(self, alg_name: str) -> Algorithm:
         """
@@ -50,7 +56,9 @@ class PyJWS:
 
         >>> jws_obj.get_algorithm_by_name("RS256")
         """
-        pass
+        if alg_name not in self._algorithms:
+            raise InvalidAlgorithmError(f"Algorithm '{alg_name}' could not be found")
+        return self._algorithms[alg_name]
 
     def get_unverified_header(self, jwt: str | bytes) -> dict[str, Any]:
         """Returns back the JWT header parameters as a dict()
@@ -58,7 +66,13 @@ class PyJWS:
         Note: The signature is not verified so the header parameters
         should not be fully trusted until signature verification is complete
         """
-        pass
+        jwt = force_bytes(jwt)
+        try:
+            header_segment = jwt.split(b'.', 1)[0]
+            header_data = base64url_decode(header_segment)
+            return json.loads(header_data)
+        except (ValueError, TypeError, binascii.Error) as e:
+            raise DecodeError("Invalid header padding") from e
 _jws_global_obj = PyJWS()
 encode = _jws_global_obj.encode
 decode_complete = _jws_global_obj.decode_complete
