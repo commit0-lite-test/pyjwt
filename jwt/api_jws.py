@@ -31,7 +31,7 @@ class PyJWS:
         return {}
 
     def register_algorithm(self, alg_id: str, alg_obj: Algorithm) -> None:
-        """Registers a new Algorithm for use when creating and verifying tokens."""
+        """Register a new Algorithm for use when creating and verifying tokens."""
         if alg_id in self._algorithms:
             raise ValueError(f"Algorithm '{alg_id}' already registered")
         self._algorithms[alg_id] = alg_obj
@@ -47,7 +47,7 @@ class PyJWS:
         self._valid_algs.remove(alg_id)
 
     def get_algorithms(self) -> list[str]:
-        """Returns a list of supported values for the 'alg' parameter."""
+        """Return a list of supported values for the 'alg' parameter."""
         return list(self._valid_algs)
 
     def get_algorithm_by_name(self, alg_name: str) -> Algorithm:
