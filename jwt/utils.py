@@ -3,11 +3,7 @@ import re
 from typing import Union
 
 try:
-    from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurve
-    from cryptography.hazmat.primitives.asymmetric.utils import (
-        decode_dss_signature,
-        encode_dss_signature,
-    )
+    import cryptography  # noqa: F401
 except ModuleNotFoundError:
     pass
 _PEMS = {
