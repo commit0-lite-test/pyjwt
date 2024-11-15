@@ -6,6 +6,7 @@ from . import __version__ as pyjwt_version
 
 try:
     import cryptography
+
     cryptography_version = cryptography.__version__
 except ImportError:
     cryptography_version = "Not installed (ImportError)"
