@@ -14,20 +14,26 @@ class CompressedPyJWT(PyJWT):
         options: dict[str, Any] | None = None,
         **kwargs
     ) -> dict[str, Any]:
-        decoded = super().decode_complete(jwt, key, algorithms, options, **kwargs)
+        # Decode the JWT without verification to get the compressed payload
+        unverified = super().decode_complete(jwt, options={"verify_signature": False})
         
-        if isinstance(decoded["payload"], bytes):
-            try:
-                # wbits=-15 has zlib not worry about headers or crc's
-                decompressed = zlib.decompress(decoded["payload"], wbits=-15)
-                decoded["payload"] = json.loads(decompressed.decode("utf-8"))
-            except (zlib.error, json.JSONDecodeError) as e:
-                raise DecodeError(f"Invalid compressed payload: {e}")
-        elif isinstance(decoded["payload"], str):
-            try:
-                decoded["payload"] = json.loads(decoded["payload"])
-            except json.JSONDecodeError as e:
-                raise DecodeError(f"Invalid JSON payload: {e}")
+        # Decompress the payload
+        try:
+            decompressed = zlib.decompress(unverified["payload"], wbits=-15)
+            unverified["payload"] = decompressed
+        except zlib.error as e:
+            raise DecodeError(f"Invalid compressed payload: {e}")
+
+        # Encode the JWT again with the decompressed payload
+        decompressed_jwt = self.encode(
+            json.loads(decompressed.decode("utf-8")),
+            key,
+            algorithm=unverified["header"]["alg"],
+            headers=unverified["header"]
+        )
+
+        # Now decode the decompressed JWT with verification
+        decoded = super().decode_complete(decompressed_jwt, key, algorithms, options, **kwargs)
         
         return decoded
 
