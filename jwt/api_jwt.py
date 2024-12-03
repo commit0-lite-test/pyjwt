@@ -113,6 +113,19 @@ class PyJWT(api_jws.PyJWS):
             self._validate_claims(payload, merged_options)
 
         decoded["payload"] = payload
+
+        try:
+            payload = json.loads(decoded["payload"])
+        except ValueError as e:
+            raise DecodeError("Invalid payload string: %s" % e)
+
+        if not isinstance(payload, dict):
+            raise DecodeError("Invalid payload string: must be a json object")
+
+        if verify_signature:
+            self._validate_claims(payload, merged_options)
+
+        decoded["payload"] = payload
         return decoded
 
     def decode(
@@ -154,7 +167,7 @@ class PyJWT(api_jws.PyJWS):
     def _validate_required_claims(self, payload, options):
         for claim in options.get("require", []):
             if claim not in payload:
-                raise MissingRequiredClaimError(f"{claim} claim is required")
+                raise MissingRequiredClaimError(claim)
 
     def _validate_exp(self, payload, now, leeway):
         try:
@@ -169,13 +182,13 @@ class PyJWT(api_jws.PyJWS):
 
     def _validate_iat(self, payload, now, leeway):
         try:
-            int(payload['iat'])
+            iat = int(payload['iat'])
         except KeyError:
             pass
         except ValueError:
             raise DecodeError('Issued At claim (iat) must be an integer.')
         else:
-            if payload['iat'] > (now + leeway):
+            if iat > (now + leeway):
                 raise InvalidIssuedAtError('Issued At claim (iat) cannot be in the future')
 
     def _validate_nbf(self, payload, now, leeway):
@@ -191,7 +204,8 @@ class PyJWT(api_jws.PyJWS):
 
     def _validate_aud(self, payload, options):
         if 'aud' not in payload:
-            # if aud is required but not present, it will be caught in _validate_required_claims
+            if 'audience' in options:
+                raise MissingRequiredClaimError('aud')
             return
 
         audience = options.get('audience')
@@ -207,12 +221,17 @@ class PyJWT(api_jws.PyJWS):
 
         if not isinstance(payload_aud, list):
             raise InvalidAudienceError('Invalid claim format in token')
-        if not any(aud in payload_aud for aud in audience):
+
+        if options.get('strict_aud', False):
+            if set(payload_aud) != set(audience):
+                raise InvalidAudienceError('Invalid audience (strict)')
+        elif not any(aud in payload_aud for aud in audience):
             raise InvalidAudienceError('Invalid audience')
 
     def _validate_iss(self, payload, options):
         if 'iss' not in payload:
-            # if iss is required but not present, it will be caught in _validate_required_claims
+            if 'issuer' in options:
+                raise MissingRequiredClaimError('iss')
             return
 
         issuer = options.get('issuer')
