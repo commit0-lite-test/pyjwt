@@ -11,14 +11,14 @@ class PyJWK:
     def __init__(self, jwk_data: JWKDict, algorithm: str | None=None) -> None:
         self._algorithms = get_default_algorithms()
         self._jwk_data = jwk_data
-        kty = self._jwk_data.get('kty', None)
-        if not kty:
+        self.key_type = self._jwk_data.get('kty', None)
+        if not self.key_type:
             raise InvalidKeyError(f'kty is not found: {self._jwk_data}')
         if not algorithm and isinstance(self._jwk_data, dict):
             algorithm = self._jwk_data.get('alg', None)
         if not algorithm:
             crv = self._jwk_data.get('crv', None)
-            if kty == 'EC':
+            if self.key_type == 'EC':
                 if crv == 'P-256' or not crv:
                     algorithm = 'ES256'
                 elif crv == 'P-384':
@@ -29,11 +29,11 @@ class PyJWK:
                     algorithm = 'ES256K'
                 else:
                     raise InvalidKeyError(f'Unsupported crv: {crv}')
-            elif kty == 'RSA':
+            elif self.key_type == 'RSA':
                 algorithm = 'RS256'
-            elif kty == 'oct':
+            elif self.key_type == 'oct':
                 algorithm = 'HS256'
-            elif kty == 'OKP':
+            elif self.key_type == 'OKP':
                 if not crv:
                     raise InvalidKeyError(f'crv is not found: {self._jwk_data}')
                 if crv == 'Ed25519':
@@ -41,13 +41,15 @@ class PyJWK:
                 else:
                     raise InvalidKeyError(f'Unsupported crv: {crv}')
             else:
-                raise InvalidKeyError(f'Unsupported kty: {kty}')
+                raise InvalidKeyError(f'Unsupported kty: {self.key_type}')
         if not has_crypto and algorithm in requires_cryptography:
             raise PyJWKError(f"{algorithm} requires 'cryptography' to be installed.")
         self.Algorithm = self._algorithms.get(algorithm)
         if not self.Algorithm:
             raise PyJWKError(f'Unable to find an algorithm for key: {self._jwk_data}')
         self.key = self.Algorithm.from_jwk(self._jwk_data)
+        self.key_id = self._jwk_data.get('kid')
+        self.public_key_use = self._jwk_data.get('use')
 
     @classmethod
     def from_dict(cls, jwk_dict: JWKDict, algorithm: str | None = None) -> 'PyJWK':
