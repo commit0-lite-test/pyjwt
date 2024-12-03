@@ -49,6 +49,18 @@ class PyJWK:
             raise PyJWKError(f'Unable to find an algorithm for key: {self._jwk_data}')
         self.key = self.Algorithm.from_jwk(self._jwk_data)
 
+    @classmethod
+    def from_dict(cls, jwk_dict: JWKDict, algorithm: str | None = None) -> 'PyJWK':
+        return cls(jwk_dict, algorithm)
+
+    @classmethod
+    def from_json(cls, jwk_json: str, algorithm: str | None = None) -> 'PyJWK':
+        try:
+            jwk_dict = json.loads(jwk_json)
+        except ValueError as e:
+            raise PyJWKError("Invalid JSON string") from e
+        return cls.from_dict(jwk_dict, algorithm)
+
 class PyJWKSet:
 
     def __init__(self, keys: list[JWKDict]) -> None:
@@ -70,6 +82,20 @@ class PyJWKSet:
             if key.key_id == kid:
                 return key
         raise KeyError(f'keyset has no key for kid: {kid}')
+
+    @classmethod
+    def from_dict(cls, jwk_set_dict: dict) -> 'PyJWKSet':
+        if not isinstance(jwk_set_dict, dict) or 'keys' not in jwk_set_dict:
+            raise PyJWKSetError('Invalid JWK Set format')
+        return cls(jwk_set_dict['keys'])
+
+    @classmethod
+    def from_json(cls, jwk_set_json: str) -> 'PyJWKSet':
+        try:
+            jwk_set_dict = json.loads(jwk_set_json)
+        except ValueError as e:
+            raise PyJWKSetError("Invalid JSON string") from e
+        return cls.from_dict(jwk_set_dict)
 
 class PyJWTSetWithTimestamp:
 
