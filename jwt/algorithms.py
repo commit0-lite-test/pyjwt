@@ -114,6 +114,7 @@ def get_default_algorithms() -> dict[str, Algorithm]:
                 "RS384": RSAAlgorithm(RSAAlgorithm.SHA384),
                 "RS512": RSAAlgorithm(RSAAlgorithm.SHA512),
                 "ES256": ECAlgorithm(ECAlgorithm.SHA256),
+                "ES256K": ECAlgorithm(ECAlgorithm.SHA256),
                 "ES384": ECAlgorithm(ECAlgorithm.SHA384),
                 "ES512": ECAlgorithm(ECAlgorithm.SHA512),
                 "PS256": RSAPSSAlgorithm(RSAPSSAlgorithm.SHA256),

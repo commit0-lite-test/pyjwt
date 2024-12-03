@@ -55,11 +55,13 @@ class PyJWS:
     def encode(
         self,
         payload: bytes | str,
-        key: str,
-        algorithm: str = "HS256",
+        key: str | None,
+        algorithm: str | None = "HS256",
         headers: Optional[dict] = None,
         json_encoder: Optional[type[json.JSONEncoder]] = None,
     ) -> str:
+        if algorithm is None:
+            algorithm = "none"
         if algorithm not in self._valid_algs:
             raise NotImplementedError("Algorithm not supported")
 
@@ -77,8 +79,12 @@ class PyJWS:
 
         segments = [
             base64url_encode(json_header),
-            base64url_encode(payload),
         ]
+        
+        if not is_payload_detached and (not headers or headers.get("b64", True)):
+            segments.append(base64url_encode(payload))
+        else:
+            segments.append(b"")
 
         signing_input = b".".join(segments)
         try:
@@ -94,13 +100,17 @@ class PyJWS:
 
     def decode_complete(
         self,
-        jwt: str | bytes,
+        jwt: str | bytes | None,
         key: str | None = None,
         algorithms: list[str] | None = None,
         options: dict[str, Any] | None = None,
+        detached_payload: bytes | None = None,
     ) -> dict[str, Any]:
         options = {**self.options, **(options or {})}
         verify_signature = options["verify_signature"]
+
+        if jwt is None or not isinstance(jwt, (str, bytes)):
+            raise DecodeError("Invalid token type")
 
         if isinstance(jwt, str):
             jwt = jwt.encode("utf-8")
@@ -123,10 +133,15 @@ class PyJWS:
         if not isinstance(header, dict):
             raise DecodeError("Invalid header string: must be a json object")
 
-        try:
-            payload = base64url_decode(payload_segment)
-        except (TypeError, binascii.Error):
-            raise DecodeError("Invalid payload padding")
+        if header.get("b64", True):
+            try:
+                payload = base64url_decode(payload_segment)
+            except (TypeError, binascii.Error):
+                raise DecodeError("Invalid payload padding")
+        else:
+            if detached_payload is None:
+                raise DecodeError('It is required that you pass in a value for the "detached_payload" argument to decode a message having the b64 header set to false.')
+            payload = detached_payload
 
         try:
             signature = base64url_decode(crypto_segment)
