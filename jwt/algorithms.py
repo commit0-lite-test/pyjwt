@@ -606,7 +606,26 @@ if has_crypto:
             """Prepare the key for use in the algorithm."""
             if isinstance(
                 key,
-                (Ed25519PrivateKey, Ed25519Public
+                (Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey),
+            ):
+                return key
+            if isinstance(key, (bytes, str)):
+                key = force_bytes(key)
+                try:
+                    if key.startswith(b"-----BEGIN "):
+                        return load_pem_private_key(
+                            key, password=None, backend=default_backend()
+                        )
+                except ValueError:
+                    try:
+                        return load_pem_public_key(key, backend=default_backend())
+                    except ValueError:
+                        pass
+                try:
+                    return load_ssh_public_key(key, backend=default_backend())
+                except ValueError:
+                    raise InvalidKeyError("Not a valid OKP key")
+            raise TypeError("Expecting a PEM-formatted key or SSH public key.")
 
         @staticmethod
         def to_jwk(
