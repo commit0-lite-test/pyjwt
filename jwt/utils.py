@@ -185,3 +185,43 @@ def merge_dict(original: dict, updates: dict) -> dict:
         else:
             merged[key] = value
     return merged
+
+
+def der_to_raw_signature(der_sig: bytes, curve: EllipticCurve) -> bytes:
+    """Convert DER signature to raw signature.
+
+    Args:
+    ----
+        der_sig (bytes): The DER-encoded signature.
+        curve (EllipticCurve): The elliptic curve used for the signature.
+
+    Returns:
+    -------
+        bytes: The raw signature.
+
+    """
+    return crypto_utils.decode_dss_signature(der_sig)
+
+
+def raw_to_der_signature(raw_sig: bytes, curve: EllipticCurve) -> bytes:
+    """Convert raw signature to DER signature.
+
+    Args:
+    ----
+        raw_sig (bytes): The raw signature.
+        curve (EllipticCurve): The elliptic curve used for the signature.
+
+    Returns:
+    -------
+        bytes: The DER-encoded signature.
+
+    """
+    num_bits = curve.key_size
+    num_bytes = (num_bits + 7) // 8
+
+    if len(raw_sig) != 2 * num_bytes:
+        raise ValueError("Invalid raw signature")
+
+    r = int.from_bytes(raw_sig[:num_bytes], byteorder="big")
+    s = int.from_bytes(raw_sig[num_bytes:], byteorder="big")
+    return crypto_utils.encode_dss_signature(r, s)
