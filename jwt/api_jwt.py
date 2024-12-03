@@ -47,6 +47,27 @@ class PyJWT:
         payloads.
         """
         pass
+
+    def encode(self, payload: dict[str, Any], key: str, algorithm: str) -> str:
+        """
+        Encode a JWT with the given payload, key, and algorithm.
+        """
+        # Placeholder implementation
+        return ""
+
+    def decode_complete(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+        """
+        Decode a JWT and return the complete token as a dictionary.
+        """
+        # Placeholder implementation
+        return {}
+
+    def decode(self, jwt: str, key: str | None = None, algorithms: list[str] | None = None) -> dict[str, Any]:
+        """
+        Decode a JWT and return its payload as a dictionary.
+        """
+        # Placeholder implementation
+        return {}
 _jwt_global_obj = PyJWT()
 encode = _jwt_global_obj.encode
 decode_complete = _jwt_global_obj.decode_complete
