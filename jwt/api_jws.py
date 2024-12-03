@@ -47,6 +47,11 @@ class PyJWS:
     def get_algorithms(self) -> list[str]:
         return list(self._valid_algs)
 
+    def get_algorithm_by_name(self, alg_name: str) -> Algorithm:
+        if alg_name not in self._algorithms:
+            raise InvalidAlgorithmError(f"Algorithm '{alg_name}' could not be found")
+        return self._algorithms[alg_name]
+
     def encode(
         self,
         payload: bytes | str,
