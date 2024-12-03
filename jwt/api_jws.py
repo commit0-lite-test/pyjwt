@@ -3,11 +3,11 @@ import binascii
 import json
 from typing import TYPE_CHECKING, Any
 from .algorithms import Algorithm, get_default_algorithms
-from .exceptions import DecodeError, InvalidAlgorithmError
-from .utils import base64url_decode, force_bytes
+from .exceptions import DecodeError, InvalidAlgorithmError, InvalidTokenError
+from .utils import base64url_decode, base64url_encode, force_bytes
 
 if TYPE_CHECKING:
-    pass
+    from typing import Optional
 
 
 class PyJWS:
@@ -28,80 +28,170 @@ class PyJWS:
         self.options = {**self._get_default_options(), **options}
 
     def _get_default_options(self) -> dict[str, Any]:
-        return {}
+        return {"verify_signature": True}
 
     def register_algorithm(self, alg_id: str, alg_obj: Algorithm) -> None:
-        """Register a new Algorithm for use when creating and verifying tokens."""
         if alg_id in self._algorithms:
             raise ValueError(f"Algorithm '{alg_id}' already registered")
+        if not isinstance(alg_obj, Algorithm):
+            raise TypeError("Object is not of type `Algorithm`")
         self._algorithms[alg_id] = alg_obj
         self._valid_algs.add(alg_id)
 
     def unregister_algorithm(self, alg_id: str) -> None:
-        """Unregisters an Algorithm for use when creating and verifying tokens
-        Throws KeyError if algorithm is not registered.
-        """
         if alg_id not in self._algorithms:
             raise KeyError(f"Algorithm '{alg_id}' not registered")
         del self._algorithms[alg_id]
         self._valid_algs.remove(alg_id)
 
     def get_algorithms(self) -> list[str]:
-        """Return a list of supported values for the 'alg' parameter."""
         return list(self._valid_algs)
 
-    def get_algorithm_by_name(self, alg_name: str) -> Algorithm:
-        """For a given string name, return the matching Algorithm object.
+    def encode(
+        self,
+        payload: bytes | str,
+        key: str,
+        algorithm: str = "HS256",
+        headers: Optional[dict] = None,
+        json_encoder: Optional[type[json.JSONEncoder]] = None,
+    ) -> str:
+        if algorithm not in self._valid_algs:
+            raise NotImplementedError("Algorithm not supported")
 
-        Example usage:
+        if not isinstance(headers, dict):
+            headers = {}
 
-        >>> jws_obj.get_algorithm_by_name("RS256")
-        """
-        if alg_name not in self._algorithms:
-            raise InvalidAlgorithmError(f"Algorithm '{alg_name}' could not be found")
-        return self._algorithms[alg_name]
+        header = {"typ": self.header_typ, "alg": algorithm}
+        header.update(headers)
+
+        json_header = json.dumps(
+            header,
+            separators=(",", ":"),
+            cls=json_encoder,
+        ).encode("utf-8")
+
+        segments = [
+            base64url_encode(json_header),
+            base64url_encode(payload),
+        ]
+
+        signing_input = b".".join(segments)
+        try:
+            alg_obj = self._algorithms[algorithm]
+            key = alg_obj.prepare_key(key)
+            signature = alg_obj.sign(signing_input, key)
+        except Exception as e:
+            raise TypeError("Unable to encode JWT") from e
+
+        segments.append(base64url_encode(signature))
+
+        return b".".join(segments).decode("utf-8")
+
+    def decode_complete(
+        self,
+        jwt: str | bytes,
+        key: str | None = None,
+        algorithms: list[str] | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        options = {**self.options, **(options or {})}
+        verify_signature = options["verify_signature"]
+
+        if isinstance(jwt, str):
+            jwt = jwt.encode("utf-8")
+
+        try:
+            header_segment, payload_segment, crypto_segment = jwt.split(b".", 2)
+        except ValueError:
+            raise DecodeError("Not enough segments")
+
+        try:
+            header_data = base64url_decode(header_segment)
+        except (TypeError, binascii.Error):
+            raise DecodeError("Invalid header padding")
+
+        try:
+            header = json.loads(header_data)
+        except ValueError as e:
+            raise DecodeError("Invalid header string: %s" % e)
+
+        if not isinstance(header, dict):
+            raise DecodeError("Invalid header string: must be a json object")
+
+        try:
+            payload = base64url_decode(payload_segment)
+        except (TypeError, binascii.Error):
+            raise DecodeError("Invalid payload padding")
+
+        try:
+            signature = base64url_decode(crypto_segment)
+        except (TypeError, binascii.Error):
+            raise DecodeError("Invalid crypto padding")
+
+        if verify_signature:
+            if algorithms is None:
+                raise DecodeError(
+                    "It is required that you pass in a value for the "
+                    '"algorithms" argument when calling decode().'
+                )
+
+            try:
+                alg = header["alg"]
+            except KeyError:
+                raise DecodeError("Unable to find the algorithm to decode the JWT")
+
+            if alg not in algorithms:
+                raise InvalidAlgorithmError("The specified alg value is not allowed")
+
+            try:
+                alg_obj = self._algorithms[alg]
+                key = alg_obj.prepare_key(key)
+
+                if not alg_obj.verify(
+                    b".".join([header_segment, payload_segment]), key, signature
+                ):
+                    raise DecodeError("Signature verification failed")
+            except KeyError:
+                raise InvalidAlgorithmError("Algorithm not supported")
+
+        return {
+            "header": header,
+            "payload": payload,
+            "signature": signature,
+        }
+
+    def decode(
+        self,
+        jwt: str | bytes,
+        key: str | None = None,
+        algorithms: list[str] | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> Any:
+        decoded = self.decode_complete(jwt, key, algorithms, options)
+        return decoded["payload"]
 
     def get_unverified_header(self, jwt: str | bytes) -> dict[str, Any]:
-        """Returns back the JWT header parameters as a dict()
-
-        Note: The signature is not verified so the header parameters
-        should not be fully trusted until signature verification is complete
-        """
+        """Returns the decoded headers without verification of any kind."""
         jwt = force_bytes(jwt)
         try:
             header_segment = jwt.split(b".", 1)[0]
+        except ValueError:
+            raise InvalidTokenError("Wrong number of segments in token")
+
+        try:
             header_data = base64url_decode(header_segment)
-            return json.loads(header_data)
-        except (ValueError, TypeError, binascii.Error) as e:
-            raise DecodeError("Invalid header padding") from e
+        except (TypeError, binascii.Error):
+            raise InvalidTokenError("Invalid header padding")
 
-    def encode(self, payload: dict[str, Any], key: str, algorithm: str) -> str:
-        """Encode a JWT with the given payload, key, and algorithm.
+        try:
+            header = json.loads(header_data)
+        except ValueError:
+            raise InvalidTokenError("Invalid header string")
 
-        This is a placeholder implementation.
-        """
-        # Placeholder for encode method
-        return ""  # Return an empty string as a placeholder
+        if not isinstance(header, dict):
+            raise InvalidTokenError("Invalid header string: must be a json object")
 
-    def decode_complete(
-        self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
-    ) -> dict[str, Any]:
-        """Decode a JWT and return the complete token as a dictionary.
-
-        This is a placeholder implementation.
-        """
-        # Placeholder for decode_complete method
-        return {}  # Return an empty dict as a placeholder
-
-    def decode(
-        self, jwt: str, key: str | None = None, algorithms: list[str] | None = None
-    ) -> dict[str, Any]:
-        """Decode a JWT and return its payload as a dictionary.
-
-        This is a placeholder implementation.
-        """
-        # Placeholder for decode method
-        return {}  # Return an empty dict as a placeholder
+        return header
 
 
 _jws_global_obj = PyJWS()
