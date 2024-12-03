@@ -26,4 +26,48 @@ class PyJWKClient:
         else:
             self.jwk_set_cache = None
         if cache_keys:
-            self.get_signing_key = lru_cache(maxsize=max_cached_keys)(self.get_signing_key)
+            self.get_signing_key = lru_cache(maxsize=max_cached_keys)(self._get_signing_key)
+
+    def get_jwk_set(self) -> PyJWKSet:
+        if self.jwk_set_cache and self.jwk_set_cache.is_valid():
+            return self.jwk_set_cache.jwk_set
+        
+        response = self._fetch_data()
+        jwk_set = PyJWKSet.from_dict(json.loads(response.decode('utf-8')))
+        
+        if self.jwk_set_cache:
+            self.jwk_set_cache.update(jwk_set)
+        
+        return jwk_set
+
+    def get_signing_keys(self) -> List[PyJWK]:
+        jwk_set = self.get_jwk_set()
+        signing_keys = [key for key in jwk_set.keys if key.public_key_use in ('sig', None)]
+        if not signing_keys:
+            raise PyJWKClientError("The JWKS endpoint did not contain any signing keys")
+        return signing_keys
+
+    def get_signing_key(self, kid: str) -> PyJWK:
+        signing_keys = self.get_signing_keys()
+        for key in signing_keys:
+            if key.key_id == kid:
+                return key
+        raise PyJWKClientError(f"Unable to find a signing key that matches: {kid}")
+
+    def get_signing_key_from_jwt(self, token: str) -> PyJWK:
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get('kid')
+        if not kid:
+            raise PyJWKClientError("Unable to find a key identifier in the token header")
+        return self.get_signing_key(kid)
+
+    def _fetch_data(self) -> bytes:
+        request = Request(self.uri, headers=self.headers)
+        try:
+            with urlopen(request, timeout=self.timeout, context=self.ssl_context) as response:
+                return response.read()
+        except URLError as e:
+            raise PyJWKClientConnectionError(f"Fail to fetch data from the url, err: {str(e)}")
+
+    def _get_signing_key(self, kid: str) -> PyJWK:
+        return self.get_signing_key(kid)
