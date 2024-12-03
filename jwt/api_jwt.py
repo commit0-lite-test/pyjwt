@@ -101,10 +101,13 @@ class PyJWT(api_jws.PyJWS):
 
         decoded = super().decode_complete(jwt, key, algorithms, merged_options)
 
-        try:
-            payload = json.loads(decoded["payload"])
-        except ValueError as e:
-            raise DecodeError("Invalid payload string: %s" % e)
+        if isinstance(decoded["payload"], dict):
+            payload = decoded["payload"]
+        else:
+            try:
+                payload = json.loads(decoded["payload"])
+            except ValueError as e:
+                raise DecodeError("Invalid payload string: %s" % e)
 
         if not isinstance(payload, dict):
             raise DecodeError("Invalid payload string: must be a json object")
@@ -224,7 +227,7 @@ class PyJWT(api_jws.PyJWS):
 
         if options.get('strict_aud', False):
             if set(payload_aud) != set(audience):
-                raise InvalidAudienceError('Invalid audience (strict)')
+                raise InvalidAudienceError("Audience doesn't match (strict)")
         elif not any(aud in payload_aud for aud in audience):
             raise InvalidAudienceError('Invalid audience')
 
