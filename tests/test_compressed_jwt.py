@@ -23,6 +23,11 @@ class CompressedPyJWT(PyJWT):
                 decoded["payload"] = json.loads(decompressed.decode("utf-8"))
             except (zlib.error, json.JSONDecodeError) as e:
                 raise DecodeError(f"Invalid compressed payload: {e}")
+        elif isinstance(decoded["payload"], str):
+            try:
+                decoded["payload"] = json.loads(decoded["payload"])
+            except json.JSONDecodeError as e:
+                raise DecodeError(f"Invalid JSON payload: {e}")
         
         return decoded
 
