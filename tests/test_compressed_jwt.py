@@ -1,5 +1,6 @@
 import json
 import zlib
+from typing import Any
 from jwt import PyJWT
 from jwt.exceptions import DecodeError
 
