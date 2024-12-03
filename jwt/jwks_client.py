@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import urllib.request
 from functools import lru_cache
@@ -8,6 +9,7 @@ from .api_jwk import PyJWK, PyJWKSet
 from .api_jwt import decode_complete as decode_token
 from .exceptions import PyJWKClientConnectionError, PyJWKClientError
 from .jwk_set_cache import JWKSetCache
+import jwt
 
 class PyJWKClient:
 
