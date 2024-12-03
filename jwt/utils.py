@@ -125,6 +125,10 @@ def base64url_decode(input: Union[str, bytes]) -> bytes:
 
 
 def to_base64url_uint(val: int) -> bytes:
+    if val < 0:
+        raise ValueError("Must be a positive integer")
+    if val == 0:
+        return b"AA"
     """Convert an integer to a base64url-encoded string.
 
     Args:

@@ -15,8 +15,12 @@ from jwt.utils import force_bytes, from_base64url_uint, to_base64url_uint
     ],
 )
 def test_to_base64url_uint(inputval, expected):
-    actual = to_base64url_uint(inputval)
-    assert actual == expected
+    if inputval < 0:
+        with pytest.raises(ValueError):
+            to_base64url_uint(inputval)
+    else:
+        actual = to_base64url_uint(inputval)
+        assert actual == expected
 
 
 @pytest.mark.parametrize(
