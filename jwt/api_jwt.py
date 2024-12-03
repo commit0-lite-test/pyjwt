@@ -18,6 +18,17 @@ class PyJWT:
             options = {}
         self.options: dict[str, Any] = {**self._get_default_options(), **options}
 
+    def _get_default_options(self) -> dict[str, Any]:
+        return {
+            'verify_signature': True,
+            'verify_exp': True,
+            'verify_nbf': True,
+            'verify_iat': True,
+            'verify_aud': True,
+            'verify_iss': True,
+            'require': []
+        }
+
     def _encode_payload(self, payload: dict[str, Any], headers: dict[str, Any] | None=None, json_encoder: type[json.JSONEncoder] | None=None) -> bytes:
         """
         Encode a given payload to the bytes to be signed.
