@@ -4,6 +4,8 @@ from typing import Union
 
 try:
     import cryptography  # type: ignore # noqa: F401
+    from cryptography.hazmat.primitives.asymmetric import utils as crypto_utils
+    from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurve
 except ImportError:
     cryptography = None
 _PEMS = {
