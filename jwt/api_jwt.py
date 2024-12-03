@@ -117,13 +117,15 @@ class PyJWT(api_jws.PyJWS):
 
         decoded["payload"] = payload
 
-        try:
-            payload = json.loads(decoded["payload"])
-        except ValueError as e:
-            raise DecodeError("Invalid payload string: %s" % e)
+        payload = decoded["payload"]
+        if isinstance(payload, (str, bytes, bytearray)):
+            try:
+                payload = json.loads(payload)
+            except ValueError as e:
+                raise DecodeError("Invalid payload string: %s" % e)
 
         if not isinstance(payload, dict):
-            raise DecodeError("Invalid payload string: must be a json object")
+            raise DecodeError("Invalid payload: must be a JSON object")
 
         if verify_signature:
             self._validate_claims(payload, merged_options)
