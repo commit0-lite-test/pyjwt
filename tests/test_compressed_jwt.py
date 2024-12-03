@@ -1,15 +1,29 @@
 import json
 import zlib
-
 from jwt import PyJWT
+from jwt.exceptions import DecodeError
 
 
 class CompressedPyJWT(PyJWT):
-    def _decode_payload(self, decoded):
-        return json.loads(
-            # wbits=-15 has zlib not worry about headers of crc's
-            zlib.decompress(decoded["payload"], wbits=-15).decode("utf-8")
-        )
+    def decode_complete(
+        self,
+        jwt: str,
+        key: str | None = None,
+        algorithms: list[str] | None = None,
+        options: dict[str, Any] | None = None,
+        **kwargs
+    ) -> dict[str, Any]:
+        decoded = super().decode_complete(jwt, key, algorithms, options, **kwargs)
+        
+        if isinstance(decoded["payload"], bytes):
+            try:
+                # wbits=-15 has zlib not worry about headers or crc's
+                decompressed = zlib.decompress(decoded["payload"], wbits=-15)
+                decoded["payload"] = json.loads(decompressed.decode("utf-8"))
+            except (zlib.error, json.JSONDecodeError) as e:
+                raise DecodeError(f"Invalid compressed payload: {e}")
+        
+        return decoded
 
 
 def test_decodes_complete_valid_jwt_with_compressed_payload():
