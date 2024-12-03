@@ -627,6 +627,23 @@ if has_crypto:
                     raise InvalidKeyError("Not a valid OKP key")
             raise TypeError("Expecting a PEM-formatted key or SSH public key.")
 
+        def sign(self, msg: bytes, key: Union[Ed25519PrivateKey, Ed448PrivateKey]) -> bytes:
+            """Sign the message using the key."""
+            return key.sign(msg)
+
+        def verify(
+            self,
+            msg: bytes,
+            key: Union[Ed25519PublicKey, Ed448PublicKey],
+            sig: bytes
+        ) -> bool:
+            """Verify the signature of the message using the key."""
+            try:
+                key.verify(sig, msg)
+                return True
+            except InvalidSignature:
+                return False
+
         @staticmethod
         def to_jwk(
             key_obj: AllowedOKPKeys, as_dict: bool = False
