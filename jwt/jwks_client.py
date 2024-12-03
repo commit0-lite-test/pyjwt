@@ -71,5 +71,6 @@ class PyJWKClient:
         except URLError as e:
             raise PyJWKClientConnectionError(f"Fail to fetch data from the url, err: {str(e)}")
 
+    @lru_cache(maxsize=128)
     def _get_signing_key(self, kid: str) -> PyJWK:
         return self.get_signing_key(kid)
