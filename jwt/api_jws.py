@@ -59,6 +59,8 @@ class PyJWS:
         algorithm: str | None = "HS256",
         headers: Optional[dict] = None,
         json_encoder: Optional[type[json.JSONEncoder]] = None,
+        sort_headers: bool = False,
+        is_payload_detached: bool = False,
     ) -> str:
         if algorithm is None:
             algorithm = "none"
