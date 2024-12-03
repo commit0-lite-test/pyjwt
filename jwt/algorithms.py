@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 from .exceptions import InvalidKeyError
 from .types import HashlibHash, JWKDict
 from .utils import (
+    der_to_raw_signature,
+    raw_to_der_signature,
     base64url_decode,
     base64url_encode,
     der_to_raw_signature,
