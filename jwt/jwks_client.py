@@ -1,10 +1,12 @@
 from __future__ import annotations
 import json
+import time
 import urllib.request
 from functools import lru_cache
 from ssl import SSLContext
 from typing import Any, Dict, List, Optional
 from urllib.error import URLError
+from urllib.request import Request
 from .api_jwk import PyJWK, PyJWKSet
 from .api_jwt import decode_complete as decode_token
 from .exceptions import PyJWKClientConnectionError, PyJWKClientError
@@ -25,20 +27,18 @@ class PyJWKClient:
             if lifespan <= 0:
                 raise PyJWKClientError(f'Lifespan must be greater than 0, the input is "{lifespan}"')
             self.jwk_set_cache = JWKSetCache(lifespan)
-        else:
-            self.jwk_set_cache = None
         if cache_keys:
-            self.get_signing_key = lru_cache(maxsize=max_cached_keys)(self._get_signing_key)
+            self._get_signing_key = lru_cache(maxsize=max_cached_keys)(self._get_signing_key)
 
     def get_jwk_set(self) -> PyJWKSet:
         if self.jwk_set_cache and self.jwk_set_cache.is_valid():
-            return self.jwk_set_cache.jwk_set
+            return self.jwk_set_cache.jwk_set_with_timestamp.jwk_set
         
         response = self._fetch_data()
         jwk_set = PyJWKSet.from_dict(json.loads(response.decode('utf-8')))
         
         if self.jwk_set_cache:
-            self.jwk_set_cache.update(jwk_set)
+            self.jwk_set_cache.jwk_set_with_timestamp = PyJWTSetWithTimestamp(jwk_set)
         
         return jwk_set
 
