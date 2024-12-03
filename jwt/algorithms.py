@@ -60,6 +60,7 @@ try:
         PublicFormat,
         load_pem_private_key,
         load_pem_public_key,
+        load_ssh_public_key,
     )
 
     has_crypto = True
@@ -307,7 +308,7 @@ if has_crypto:
 
         def compute_hash_digest(self, bytestr: bytes) -> bytes:
             """Compute a hash digest using the specified algorithm's hash algorithm."""
-            return self.hash_alg().finalize(self.hash_alg().update(bytestr))
+            return self.hash_alg().digest(bytestr)
 
         @staticmethod
         def to_jwk(
@@ -438,6 +439,7 @@ if has_crypto:
                 'secp256r1': 'P-256',
                 'secp384r1': 'P-384',
                 'secp521r1': 'P-521',
+                'secp256k1': 'secp256k1',
             }.get(key_obj.curve.name, key_obj.curve.name)
 
             jwk = {
@@ -604,128 +606,7 @@ if has_crypto:
             """Prepare the key for use in the algorithm."""
             if isinstance(
                 key,
-                (Ed25519PrivateKey, Ed25519PublicKey, Ed448PrivateKey, Ed448PublicKey),
-            ):
-                return key
-            if isinstance(key, (bytes, str)):
-                key = force_bytes(key)
-                try:
-                    if key.startswith(b"-----BEGIN "):
-                        return load_pem_private_key(
-                            key, password=None, backend=default_backend()
-                        )
-                except ValueError:
-                    try:
-                        return load_pem_public_key(key, backend=default_backend())
-                    except ValueError:
-                        pass
-                try:
-                    return load_ssh_public_key(key, backend=default_backend())
-                except ValueError:
-                    raise InvalidKeyError("Not a valid OKP key")
-            raise TypeError("Expecting a PEM-formatted key or SSH public key.")
-
-        def sign(
-            self, msg: str | bytes, key: Ed25519PrivateKey | Ed448PrivateKey
-        ) -> bytes:
-            """Sign a message ``msg`` using the EdDSA private key ``key``
-            :param str|bytes msg: Message to sign
-            :param Ed25519PrivateKey}Ed448PrivateKey key: A :class:`.Ed25519PrivateKey`
-                or :class:`.Ed448PrivateKey` isinstance
-            :return bytes signature: The signature, as bytes
-            """
-            msg = force_bytes(msg)
-            return key.sign(msg)
-
-        def verify(
-            self, msg: str | bytes, key: AllowedOKPKeys, sig: str | bytes
-        ) -> bool:
-            """Verify a given ``msg`` against a signature ``sig`` using the EdDSA key ``key``
-
-            :param str|bytes sig: EdDSA signature to check ``msg`` against
-            :param str|bytes msg: Message to sign
-            :param Ed25519PrivateKey|Ed25519PublicKey|Ed448PrivateKey|Ed448PublicKey key:
-                A private or public EdDSA key instance
-            :return bool verified: True if signature is valid, False if not.
-            """
-            msg = force_bytes(msg)
-            sig = force_bytes(sig)
-            try:
-                if isinstance(key, (Ed25519PrivateKey, Ed448PrivateKey)):
-                    key.public_key().verify(sig, msg)
-                else:
-                    key.verify(sig, msg)
-                return True
-            except InvalidSignature:
-                return False
-
-        @staticmethod
-        def to_jwk(key_obj: AllowedOKPKeys, as_dict: bool = False) -> Union[JWKDict, str]:
-            """Serialize the key into a JWK."""
-            if isinstance(key_obj, (Ed25519PrivateKey, Ed448PrivateKey)):
-                private_bytes = key_obj.private_bytes(
-                    encoding=Encoding.Raw,
-                    format=PrivateFormat.Raw,
-                    encryption_algorithm=NoEncryption(),
-                )
-                public_key = key_obj.public_key()
-                public_bytes = public_key.public_bytes(
-                    encoding=Encoding.Raw, format=PublicFormat.Raw
-                )
-                crv = "Ed25519" if isinstance(key_obj, Ed25519PrivateKey) else "Ed448"
-                jwk = {
-                    "kty": "OKP",
-                    "crv": crv,
-                    "x": base64url_encode(public_bytes).decode(),
-                    "d": base64url_encode(private_bytes).decode(),
-                }
-            elif isinstance(key_obj, (Ed25519PublicKey, Ed448PublicKey)):
-                public_bytes = key_obj.public_bytes(
-                    encoding=Encoding.Raw, format=PublicFormat.Raw
-                )
-                crv = "Ed25519" if isinstance(key_obj, Ed25519PublicKey) else "Ed448"
-                jwk = {
-                    "kty": "OKP",
-                    "crv": crv,
-                    "x": base64url_encode(public_bytes).decode(),
-                }
-            else:
-                raise InvalidKeyError("Not a valid OKP key")
-
-            if as_dict:
-                return jwk
-            return json.dumps(jwk)
-
-        @staticmethod
-        def from_jwk(jwk: str | JWKDict) -> AllowedOKPKeys:
-            """Deserialize a JWK into a key object."""
-            if isinstance(jwk, str):
-                jwk = json.loads(jwk)
-            if not isinstance(jwk, dict):
-                raise InvalidKeyError("Invalid JWK")
-
-            if jwk.get("kty") != "OKP":
-                raise InvalidKeyError("Not an OKP key")
-
-            curve_name = jwk["crv"]
-            if curve_name == "Ed25519":
-                if "d" in jwk:
-                    return Ed25519PrivateKey.from_private_bytes(
-                        base64url_decode(jwk["d"])
-                    )
-                else:
-                    return Ed25519PublicKey.from_public_bytes(
-                        base64url_decode(jwk["x"])
-                    )
-            elif curve_name == "Ed448":
-                if "d" in jwk:
-                    return Ed448PrivateKey.from_private_bytes(
-                        base64url_decode(jwk["d"])
-                    )
-                else:
-                    return Ed448PublicKey.from_public_bytes(base64url_decode(jwk["x"]))
-            else:
-                raise InvalidKeyError(f"Unsupported curve: {curve_name}")
+                (Ed25519PrivateKey, Ed25519Public
 
         @staticmethod
         def to_jwk(
