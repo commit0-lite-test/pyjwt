@@ -182,6 +182,8 @@ class NoneAlgorithm(Algorithm):
 
     def prepare_key(self, key: Any) -> None:
         """Prepare the key for use in the algorithm."""
+        if key is not None:
+            raise InvalidKeyError("The specified key must be None.")
         return None
 
     def sign(self, msg: bytes, key: Any) -> bytes:
@@ -195,18 +197,12 @@ class NoneAlgorithm(Algorithm):
     @staticmethod
     def to_jwk(key_obj: Any, as_dict: bool = False) -> Union[JWKDict, str]:
         """Serialize the key into a JWK."""
-        if as_dict:
-            return {"kty": "none"}
-        return json.dumps({"kty": "none"})
+        raise NotImplementedError("JWK is not supported for the 'none' algorithm.")
 
     @staticmethod
     def from_jwk(jwk: str | JWKDict) -> None:
         """Deserialize a JWK into a key object."""
-        if isinstance(jwk, str):
-            jwk = json.loads(jwk)
-        if not isinstance(jwk, dict) or jwk.get("kty") != "none":
-            raise InvalidKeyError('Not a valid "none" key')
-        return None
+        raise NotImplementedError("JWK is not supported for the 'none' algorithm.")
 
 
 class HMACAlgorithm(Algorithm):
@@ -223,8 +219,9 @@ class HMACAlgorithm(Algorithm):
 
     def prepare_key(self, key: Any) -> bytes:
         """Prepare the key for use in the algorithm."""
-        key = force_bytes(key)
-        return key
+        if not isinstance(key, (str, bytes)):
+            raise TypeError("Expected a string or bytes value")
+        return force_bytes(key)
 
     def sign(self, msg: bytes, key: Any) -> bytes:
         """Sign the message using the key."""
@@ -289,8 +286,12 @@ if has_crypto:
                     try:
                         return load_pem_public_key(key, backend=default_backend())
                     except ValueError:
-                        raise InvalidKeyError("Not a valid RSA key")
-            raise TypeError("Expecting a PEM-formatted key.")
+                        pass
+                try:
+                    return load_ssh_public_key(key, backend=default_backend())
+                except ValueError:
+                    raise InvalidKeyError("Not a valid RSA key")
+            raise TypeError("Expecting a PEM-formatted key or SSH public key.")
 
         def sign(self, msg: bytes, key: AllowedRSAKeys) -> bytes:
             """Sign the message using the key."""
@@ -303,6 +304,10 @@ if has_crypto:
                 return True
             except InvalidSignature:
                 return False
+
+        def compute_hash_digest(self, bytestr: bytes) -> bytes:
+            """Compute a hash digest using the specified algorithm's hash algorithm."""
+            return self.hash_alg().finalize(self.hash_alg().update(bytestr))
 
         @staticmethod
         def to_jwk(
@@ -395,8 +400,12 @@ if has_crypto:
                     try:
                         return load_pem_public_key(key, backend=default_backend())
                     except ValueError:
-                        raise InvalidKeyError("Not a valid EC key")
-            raise TypeError("Expecting a PEM-formatted key.")
+                        pass
+                try:
+                    return load_ssh_public_key(key, backend=default_backend())
+                except ValueError:
+                    raise InvalidKeyError("Not a valid EC key")
+            raise TypeError("Expecting a PEM-formatted key or SSH public key.")
 
         def sign(self, msg: bytes, key: AllowedECKeys) -> bytes:
             """Sign the message using the key."""
@@ -407,10 +416,80 @@ if has_crypto:
             """Verify the signature of the message using the key."""
             try:
                 der_sig = raw_to_der_signature(sig, key.curve)
+                if isinstance(key, EllipticCurvePrivateKey):
+                    key = key.public_key()
                 key.verify(der_sig, msg, ECDSA(self.hash_alg()))
                 return True
             except InvalidSignature:
                 return False
+
+        @staticmethod
+        def to_jwk(key_obj: AllowedECKeys, as_dict: bool = False) -> Union[JWKDict, str]:
+            """Serialize the key into a JWK."""
+            if isinstance(key_obj, EllipticCurvePrivateKey):
+                numbers = key_obj.private_numbers()
+                public_numbers = numbers.public_numbers
+            elif isinstance(key_obj, EllipticCurvePublicKey):
+                public_numbers = key_obj.public_numbers()
+            else:
+                raise InvalidKeyError("Not a valid EC key")
+
+            crv = {
+                'secp256r1': 'P-256',
+                'secp384r1': 'P-384',
+                'secp521r1': 'P-521',
+            }.get(key_obj.curve.name, key_obj.curve.name)
+
+            jwk = {
+                "kty": "EC",
+                "crv": crv,
+                "x": to_base64url_uint(public_numbers.x).decode(),
+                "y": to_base64url_uint(public_numbers.y).decode(),
+            }
+
+            if isinstance(key_obj, EllipticCurvePrivateKey):
+                jwk["d"] = to_base64url_uint(numbers.private_value).decode()
+
+            if as_dict:
+                return jwk
+            return json.dumps(jwk)
+
+        @staticmethod
+        def from_jwk(jwk: str | JWKDict) -> AllowedECKeys:
+            """Deserialize a JWK into a key object."""
+            if isinstance(jwk, str):
+                jwk = json.loads(jwk)
+            if not isinstance(jwk, dict):
+                raise InvalidKeyError("Invalid JWK")
+
+            if jwk.get("kty") != "EC":
+                raise InvalidKeyError("Not an EC key")
+
+            curve_name = jwk["crv"]
+            if curve_name == "P-256":
+                curve = SECP256R1()
+            elif curve_name == "P-384":
+                curve = SECP384R1()
+            elif curve_name == "P-521":
+                curve = SECP521R1()
+            elif curve_name == "secp256k1":
+                curve = SECP256K1()
+            else:
+                raise InvalidKeyError(f"Unsupported curve: {curve_name}")
+
+            x = from_base64url_uint(jwk["x"])
+            y = from_base64url_uint(jwk["y"])
+
+            if "d" in jwk:
+                d = from_base64url_uint(jwk["d"])
+                return EllipticCurvePrivateNumbers(
+                    private_value=d,
+                    public_numbers=EllipticCurvePublicNumbers(x=x, y=y, curve=curve),
+                ).private_key(default_backend())
+            else:
+                return EllipticCurvePublicNumbers(x=x, y=y, curve=curve).public_key(
+                    default_backend()
+                )
 
         @staticmethod
         def to_jwk(
@@ -539,8 +618,12 @@ if has_crypto:
                     try:
                         return load_pem_public_key(key, backend=default_backend())
                     except ValueError:
-                        raise InvalidKeyError("Not a valid OKP key")
-            raise TypeError("Expecting a PEM-formatted key.")
+                        pass
+                try:
+                    return load_ssh_public_key(key, backend=default_backend())
+                except ValueError:
+                    raise InvalidKeyError("Not a valid OKP key")
+            raise TypeError("Expecting a PEM-formatted key or SSH public key.")
 
         def sign(
             self, msg: str | bytes, key: Ed25519PrivateKey | Ed448PrivateKey
@@ -575,6 +658,74 @@ if has_crypto:
                 return True
             except InvalidSignature:
                 return False
+
+        @staticmethod
+        def to_jwk(key_obj: AllowedOKPKeys, as_dict: bool = False) -> Union[JWKDict, str]:
+            """Serialize the key into a JWK."""
+            if isinstance(key_obj, (Ed25519PrivateKey, Ed448PrivateKey)):
+                private_bytes = key_obj.private_bytes(
+                    encoding=Encoding.Raw,
+                    format=PrivateFormat.Raw,
+                    encryption_algorithm=NoEncryption(),
+                )
+                public_key = key_obj.public_key()
+                public_bytes = public_key.public_bytes(
+                    encoding=Encoding.Raw, format=PublicFormat.Raw
+                )
+                crv = "Ed25519" if isinstance(key_obj, Ed25519PrivateKey) else "Ed448"
+                jwk = {
+                    "kty": "OKP",
+                    "crv": crv,
+                    "x": base64url_encode(public_bytes).decode(),
+                    "d": base64url_encode(private_bytes).decode(),
+                }
+            elif isinstance(key_obj, (Ed25519PublicKey, Ed448PublicKey)):
+                public_bytes = key_obj.public_bytes(
+                    encoding=Encoding.Raw, format=PublicFormat.Raw
+                )
+                crv = "Ed25519" if isinstance(key_obj, Ed25519PublicKey) else "Ed448"
+                jwk = {
+                    "kty": "OKP",
+                    "crv": crv,
+                    "x": base64url_encode(public_bytes).decode(),
+                }
+            else:
+                raise InvalidKeyError("Not a valid OKP key")
+
+            if as_dict:
+                return jwk
+            return json.dumps(jwk)
+
+        @staticmethod
+        def from_jwk(jwk: str | JWKDict) -> AllowedOKPKeys:
+            """Deserialize a JWK into a key object."""
+            if isinstance(jwk, str):
+                jwk = json.loads(jwk)
+            if not isinstance(jwk, dict):
+                raise InvalidKeyError("Invalid JWK")
+
+            if jwk.get("kty") != "OKP":
+                raise InvalidKeyError("Not an OKP key")
+
+            curve_name = jwk["crv"]
+            if curve_name == "Ed25519":
+                if "d" in jwk:
+                    return Ed25519PrivateKey.from_private_bytes(
+                        base64url_decode(jwk["d"])
+                    )
+                else:
+                    return Ed25519PublicKey.from_public_bytes(
+                        base64url_decode(jwk["x"])
+                    )
+            elif curve_name == "Ed448":
+                if "d" in jwk:
+                    return Ed448PrivateKey.from_private_bytes(
+                        base64url_decode(jwk["d"])
+                    )
+                else:
+                    return Ed448PublicKey.from_public_bytes(base64url_decode(jwk["x"]))
+            else:
+                raise InvalidKeyError(f"Unsupported curve: {curve_name}")
 
         @staticmethod
         def to_jwk(
