@@ -79,7 +79,20 @@ class PyJWT(api_jws.PyJWS):
                 'It is required that you pass in a value for the "algorithms" argument when calling decode().'
             )
 
-        decoded = super().decode_complete(jwt, key, algorithms, options, **kwargs)
+        # Extract JWT-specific kwargs
+        audience = kwargs.pop('audience', None)
+        issuer = kwargs.pop('issuer', None)
+        leeway = kwargs.pop('leeway', None)
+
+        # Update options with JWT-specific parameters
+        if audience is not None:
+            merged_options['audience'] = audience
+        if issuer is not None:
+            merged_options['issuer'] = issuer
+        if leeway is not None:
+            merged_options['leeway'] = leeway
+
+        decoded = super().decode_complete(jwt, key, algorithms, merged_options)
 
         try:
             payload = json.loads(decoded["payload"])
@@ -110,27 +123,28 @@ class PyJWT(api_jws.PyJWS):
         self, payload: dict[str, Any], options: dict[str, Any]
     ) -> None:
         now = timegm(datetime.now(tz=timezone.utc).utctimetuple())
+        leeway = options.get('leeway', 0)
 
         if "verify_exp" in options and options["verify_exp"]:
             exp = payload.get("exp")
             if exp:
                 try:
-                    if int(exp) < now:
+                    if int(exp) < (now - leeway):
                         raise ExpiredSignatureError("Signature has expired")
                 except ValueError:
                     raise DecodeError("Expiration Time claim (exp) must be an integer.")
-            elif "exp" in options["require"]:
+            elif "exp" in options.get("require", []):
                 raise MissingRequiredClaimError("Expiration Time claim (exp) is required")
 
         if "verify_nbf" in options and options["verify_nbf"]:
             nbf = payload.get("nbf")
             if nbf:
                 try:
-                    if int(nbf) > now:
+                    if int(nbf) > (now + leeway):
                         raise ImmatureSignatureError("The token is not yet valid (nbf)")
                 except ValueError:
                     raise DecodeError("Not Before claim (nbf) must be an integer.")
-            elif "nbf" in options["require"]:
+            elif "nbf" in options.get("require", []):
                 raise MissingRequiredClaimError("Not Before claim (nbf) is required")
 
         if "verify_iat" in options and options["verify_iat"]:
@@ -140,25 +154,35 @@ class PyJWT(api_jws.PyJWS):
                     int(iat)
                 except ValueError:
                     raise DecodeError("Issued At claim (iat) must be an integer.")
-            elif "iat" in options["require"]:
+            elif "iat" in options.get("require", []):
                 raise MissingRequiredClaimError("Issued At claim (iat) is required")
 
         if "verify_aud" in options and options["verify_aud"]:
+            expected_aud = options.get("audience")
             aud = payload.get("aud")
             if aud:
                 if isinstance(aud, str):
                     aud = [aud]
                 if not isinstance(aud, list):
                     raise InvalidAudienceError("Invalid audience")
-            elif "aud" in options["require"]:
+                if expected_aud:
+                    if isinstance(expected_aud, str):
+                        expected_aud = [expected_aud]
+                    if not set(aud).intersection(expected_aud):
+                        raise InvalidAudienceError("Audience doesn't match")
+            elif "aud" in options.get("require", []):
                 raise MissingRequiredClaimError("Audience claim (aud) is required")
 
         if "verify_iss" in options and options["verify_iss"]:
+            expected_iss = options.get("issuer")
             iss = payload.get("iss")
-            if not iss and "iss" in options["require"]:
+            if expected_iss:
+                if iss != expected_iss:
+                    raise InvalidIssuerError("Issuer does not match")
+            elif not iss and "iss" in options.get("require", []):
                 raise MissingRequiredClaimError("Issuer claim (iss) is required")
 
-        for claim in options["require"]:
+        for claim in options.get("require", []):
             if claim not in payload:
                 raise MissingRequiredClaimError(f"{claim} claim is required")
 
